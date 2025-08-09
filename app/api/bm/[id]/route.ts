@@ -1,56 +1,82 @@
-import { NextResponse } from 'next/server';
-import { readBM, writeBM } from '@/lib/jsondb';
-import { BMAccountSchema } from '@/lib/types';
+// app/api/bm/[id]/route.ts
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { bmUpdateSchema } from '@/lib/bm-zod'
+import { normalizeSaleStatus, normalizeStatus, normalizeType } from '@/lib/bm-normalizers'
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+type Params = { params: { id: string } }
+
+// (opcional) GET /api/bm/:id
+export async function GET(_req: Request, { params }: Params) {
   try {
-    const { id } = params;
-    const body = await request.json();
-    const updatedAccountData = BMAccountSchema.omit({ id: true, createdAt: true, updatedAt: true, hash: true, saleStatus: true }).parse(body);
-
-    let accounts = await readBM();
-    const accountIndex = accounts.findIndex(acc => acc.id === id);
-
-    if (accountIndex === -1) {
-      return new NextResponse(JSON.stringify({ message: 'BM account not found' }), { status: 404 });
-    }
-
-    const updatedAccount = {
-      ...accounts[accountIndex],
-      ...updatedAccountData,
-      updatedAt: new Date().toISOString(),
-      saleStatus: body.saleStatus ?? accounts[accountIndex].saleStatus,
-    };
-    accounts[accountIndex] = updatedAccount;
-    await writeBM(accounts);
-
-    return new NextResponse(JSON.stringify(updatedAccount), { status: 200 });
+    const item = await prisma.bMAccount.findUnique({ where: { id: params.id } })
+    if (!item) return NextResponse.json({ message: 'Not found' }, { status: 404 })
+    return NextResponse.json(item)
   } catch (error) {
-    console.error(`Error in PUT /api/bm/${params.id}:`, error);
-    if (error instanceof Error) {
-      return new NextResponse(JSON.stringify({ message: 'Invalid data', error: error.message }), { status: 400 });
-    }
-    return new NextResponse(JSON.stringify({ message: 'Failed to update BM account' }), { status: 500 });
+    console.error(`Error in GET /api/bm/${params.id}:`, error)
+    return NextResponse.json({ message: 'Failed to fetch' }, { status: 500 })
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+/**
+ * PUT /api/bm/:id
+ * Semântica clássica de PUT: aceita payload “completo”.
+ * Mas aqui suportamos parcial também (igual PATCH) para praticidade.
+ */
+export async function PUT(req: Request, { params }: Params) {
   try {
-    const { id } = params;
-    let accounts = await readBM();
-    const initialLength = accounts.length;
-    accounts = accounts.filter(acc => acc.id !== id);
+    const raw = await req.json()
+    const parsed = bmUpdateSchema.parse(raw)
 
-    if (accounts.length === initialLength) {
-      return new NextResponse(JSON.stringify({ message: 'BM account not found' }), { status: 404 });
+    const data: any = {}
+    if (parsed.title !== undefined) data.title = parsed.title
+    if (parsed.description !== undefined) data.description = parsed.description
+    if (parsed.priceBRL !== undefined) data.priceBRL = parsed.priceBRL
+    if (parsed.status !== undefined) data.status = normalizeStatus(parsed.status)
+    if (parsed.type !== undefined) data.type = normalizeType(parsed.type)
+    if (parsed.platform !== undefined) data.platform = normalizeType(parsed.platform)
+    if (parsed.saleStatus !== undefined) data.saleStatus = normalizeSaleStatus(parsed.saleStatus)
+    if (parsed.hash !== undefined) data.hash = parsed.hash ?? null
+
+    const updated = await prisma.bMAccount.update({
+      where: { id: params.id },
+      data,
+    })
+    return NextResponse.json(updated)
+  } catch (error: any) {
+    console.error(`Error in PUT /api/bm/${params.id}:`, error)
+    if (error?.code === 'P2025') {
+      return NextResponse.json({ message: 'BM account not found' }, { status: 404 })
     }
-
-    await writeBM(accounts);
-    return new NextResponse(null, { status: 204 });
-  } catch (error) {
-    console.error(`Error in DELETE /api/bm/${params.id}:`, error);
-    return new NextResponse(JSON.stringify({ message: 'Failed to delete BM account' }), { status: 500 });
+    const isZod = !!error?.issues
+    return NextResponse.json(
+      { message: isZod ? 'Invalid data' : 'Failed to update BM account', error: String(error.message ?? error) },
+      { status: isZod ? 400 : 500 },
+    )
   }
 }
 
-export const dynamic = "force-dynamic";
+/**
+ * PATCH /api/bm/:id (opcional)
+ * Idêntico ao PUT acima (parcial). Mantive por ergonomia REST.
+ */
+export async function PATCH(req: Request, ctx: Params) {
+  return PUT(req, ctx)
+}
+
+// DELETE /api/bm/:id
+export async function DELETE(_req: Request, { params }: Params) {
+  try {
+    await prisma.bMAccount.delete({ where: { id: params.id } })
+    return new NextResponse(null, { status: 204 })
+  } catch (error: any) {
+    console.error(`Error in DELETE /api/bm/${params.id}:`, error)
+    if (error?.code === 'P2025') {
+      return NextResponse.json({ message: 'BM account not found' }, { status: 404 })
+    }
+    return NextResponse.json({ message: 'Failed to delete BM account' }, { status: 500 })
+  }
+}
