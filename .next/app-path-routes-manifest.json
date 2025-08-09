@@ -1,0 +1,10 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/api/admin/login/route": "/api/admin/login",
+  "/api/bm/[id]/route": "/api/bm/[id]",
+  "/api/bm/route": "/api/bm",
+  "/api/admin/logout/route": "/api/admin/logout",
+  "/admin/login/page": "/admin/login",
+  "/admin/page": "/admin",
+  "/page": "/"
+}

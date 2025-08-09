@@ -187,7 +187,6 @@ export function BMTable({ onEdit, onDelete, onCreate, isLoading }: BMTableProps)
                 <tr key={account.id} className="border-b border-white/[0.02] hover:bg-white/[0.01] transition-colors duration-200">
                   <td className="px-4 py-3 text-white/90 text-sm font-medium">{account.title}</td>
                   <td className="px-4 py-3 text-white/80 text-sm">{account.priceBRL.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                  <td className="px-4 py-3 text-white/80 text-sm">{account.limitBRL.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
                   <td className="px-4 py-3">
                     <Badge className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/80">
                       {account.status}

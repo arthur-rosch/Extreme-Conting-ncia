@@ -72,6 +72,17 @@ export function BMKanbanBoard() {
     }
   }
 
+  function parseWhatsFormatting(text: string) {
+    if (!text) return "";
+    return text
+      .replace(/`(.+?)`/g, "<code>$1</code>")     // monospace
+      .replace(/\*(.+?)\*/g, "<strong>$1</strong>") // bold
+      .replace(/_(.+?)_/g, "<em>$1</em>")           // italic
+      .replace(/~(.+?)~/g, "<s>$1</s>")             // strike
+      .replace(/\n/g, "<br/>");                     // quebra de linha
+  }
+
+
   return (
     <div className="min-h-screen p-8" style={{ backgroundColor: '#010B18' }}>
       <div className="max-w-full mx-auto pt-24">
@@ -163,12 +174,13 @@ export function BMKanbanBoard() {
                       <h4 className="font-medium text-white/90 text-sm leading-tight group-hover:text-white transition-colors duration-300">
                         {account.title}
                       </h4>
-                      <p className="text-white/60 text-xs">Hash: {account.hash}</p>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <pre className="text-white/60 text-xs leading-relaxed whitespace-pre-wrap font-mono group-hover:text-white/70 transition-colors duration-300">
-                        {account.description}
-                      </pre>
+                      <div
+                        className="text-white/60 text-xs leading-relaxed whitespace-pre-wrap font-mono group-hover:text-white/70 transition-colors duration-300"
+                        dangerouslySetInnerHTML={{ __html: parseWhatsFormatting(account.description) }}
+                      />
+
 
                       <div className="flex justify-between items-end pt-3 border-t border-white/[0.05]">
                         <div>
@@ -179,8 +191,8 @@ export function BMKanbanBoard() {
                         </Badge>
                       </div>
                       <div className="flex justify-end gap-2 pt-4 border-t border-white/[0.05]">
-                        <Button className="bg-blue-600 text-white hover:bg-blue-700">
-                          <ShoppingCart className="mr-2 h-4 w-4" /> Comprar
+                        <Button className="bg-green-600 text-white hover:bg-green-700">
+                          <ShoppingCart className="mr-2 h-4 w-4" /> whatsapp
                         </Button>
                       </div>
                     </CardContent>

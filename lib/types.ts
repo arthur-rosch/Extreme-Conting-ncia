@@ -9,7 +9,7 @@ export const BMAccountSchema = z.object({
   title: z.string(),
   description: z.string(),
   priceBRL: z.number(),
-  limitBRL: z.number(),
+
   status: bmStatusSchema,
   type: bmTypeSchema,
   platform: z.enum(['google', 'meta']).default('meta'),
