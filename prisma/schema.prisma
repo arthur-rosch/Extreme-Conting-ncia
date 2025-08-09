@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BmStatus {
+  ONE_10K           @map("1-10k")
+  TENK_30K          @map("10k-30k")
+  THIRTYK_70K       @map("30k-70k")
+  SEVENTYK_100K     @map("70k-100k")
+  HUNDREDK_500K     @map("100k-500k")
+  FIVEHUNDREDK_PLUS @map("500k+")
+}
+
+enum BmType {
+  meta
+  google
+}
+
+enum BmSaleStatus {
+  available
+  sold
+}
+
+model BMAccount {
+  id          String       @id @default(uuid())
+  title       String
+  description String
+  priceBRL    Float
+  status      BmStatus
+  type        BmType
+  platform    BmType       @default(meta)
+  saleStatus  BmSaleStatus @default(available)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  hash        String? // Optional
+
+  @@map("BMAccounts")
+}
