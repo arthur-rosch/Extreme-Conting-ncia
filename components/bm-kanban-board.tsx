@@ -4,25 +4,17 @@ import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react"
+import { ChevronLeft, ChevronRight, Filter, ShoppingCart, Instagram, MessageCircle } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Image from "next/image"
 import { BMAccount } from "@/lib/types"
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
 
 type Platform = "google" | "meta"
 
-// Prisma -> Coluna (IDs como no seu array `columns`)
-const statusToColumnId: Record<string, string> = {
-  ONE_10K: "1-10k",
-  TENK_30K: "10k-30k",
-  THIRTYK_70K: "30k-70k",
-  SEVENTYK_100K: "70k-100k",
-  HUNDREDK_500K: "100k-500k",
-  FIVEHUNDREDK_PLUS: "500k+",
-}
-
-type BMAccountWithStatusId = BMAccount & { statusId?: string }
-
+/** Colunas (inclui Vendidas) */
 const columns = [
   { id: "1-10k", title: "1 a 10k Gastos", color: "text-amber-300", bgColor: "bg-amber-400/20", borderColor: "border-amber-400/30" },
   { id: "10k-30k", title: "10k a 30k Gastos", color: "text-slate-300", bgColor: "bg-slate-400/20", borderColor: "border-slate-400/30" },
@@ -30,7 +22,40 @@ const columns = [
   { id: "70k-100k", title: "70k a 100k Gastos", color: "text-violet-300", bgColor: "bg-violet-400/20", borderColor: "border-violet-400/30" },
   { id: "100k-500k", title: "100 a 500k gastos", color: "text-cyan-300", bgColor: "bg-cyan-400/20", borderColor: "border-cyan-400/30" },
   { id: "500k+", title: "500k+ Gastos", color: "text-pink-300", bgColor: "bg-pink-400/20", borderColor: "border-pink-400/30" },
-]
+  { id: "sold", title: "Vendidas", color: "text-emerald-300", bgColor: "bg-emerald-400/20", borderColor: "border-emerald-400/30" },
+] as const
+
+/** Labels do picker mobile (parecido com o print) */
+const MOBILE_LABELS: Record<string, string> = {
+  "1-10k": "1 a 10k Gastos",
+  "10k-30k": "10k a 30k Gastos",
+  "30k-70k": "30k a 70k Gastos",
+  "70k-100k": "70k a 100k Gastos",
+  "100k-500k": "100k a 500k gastos",
+  "500k+": "500k+ Gastos",
+  "sold": "Vendidas",
+}
+
+const WHATSAPP_URL =
+  process.env.NEXT_PUBLIC_WHATSAPP_URL ??
+  "https://wa.me/0000000000000?text=" + encodeURIComponent("Olá! Quero saber mais sobre as BMs.");
+
+const INSTAGRAM_URL =
+  process.env.NEXT_PUBLIC_INSTAGRAM_URL ?? "https://instagram.com/seu_perfil";
+
+
+/** Map de status -> coluna */
+const statusToColumnId: Record<string, string> = {
+  ONE_10K: "1-10k",
+  TENK_30K: "10k-30k",
+  THIRTYK_70K: "30k-70k",
+  SEVENTYK_100K: "70k-100k",
+  HUNDREDK_500K: "100k-500k",
+  FIVEHUNDREDK_PLUS: "500k+",
+  SOLD: "sold",
+}
+
+type BMAccountWithStatusId = BMAccount & { statusId?: string }
 
 // ---- helpers ----
 const formatBRL = (v: number) =>
@@ -47,111 +72,222 @@ function escapeHtml(s: string) {
 function parseWhatsFormatting(text: string) {
   const safe = escapeHtml(text ?? "")
   return safe
-    .replace(/`(.+?)`/g, "<code>$1</code>") // monospace
-    .replace(/\*(.+?)\*/g, "<strong>$1</strong>") // bold
-    .replace(/_(.+?)_/g, "<em>$1</em>") // italic
-    .replace(/~(.+?)~/g, "<s>$1</s>") // strike
-    .replace(/\n/g, "<br/>") // br
+    .replace(/`(.+?)`/g, "<code>$1</code>")
+    .replace(/\*(.+?)\*/g, "<strong>$1</strong>")
+    .replace(/_(.+?)_/g, "<em>$1</em>")
+    .replace(/~(.+?)~/g, "<s>$1</s>")
+    .replace(/\n/g, "<br/>")
+}
+
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width:${breakpoint - 1}px)`)
+    const onChange = (e: MediaQueryListEvent | MediaQueryList) =>
+      setIsMobile((e as MediaQueryList).matches ?? (e as any).matches)
+    onChange(mq)
+    mq.addEventListener?.("change", onChange as any)
+    return () => mq.removeEventListener?.("change", onChange as any)
+  }, [breakpoint])
+  return isMobile
+}
+
+// Detecta "vendida" de forma tolerante
+function isSold(acc: any) {
+  const v = acc?.saleStatus ?? acc?.sale_status ?? acc?.status
+  if (typeof v === "string") {
+    const s = v.toUpperCase()
+    if (["SOLD", "VENDIDA", "VENDIDO", "SOLD_OUT", "SOLD-OUT", "SOLDOUT"].includes(s)) return true
+  }
+  return acc?.sold === true || acc?.isSold === true
 }
 
 export function BMKanbanBoard() {
   const [bmAccounts, setBmAccounts] = useState<BMAccountWithStatusId[]>([])
   const [activeTab, setActiveTab] = useState<Platform>("meta")
+  const isMobile = useIsMobile()
 
-  // fetch com fallback p/ paginação
+  /** Mobile: apenas 1 coluna ativa de cada vez */
+  const [mobileColumn, setMobileColumn] = useState<string>(columns[0].id)
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  // fetch com paginação
   useEffect(() => {
-    let mounted = true;
-    const controller = new AbortController();
+    let mounted = true
+    const controller = new AbortController()
 
     async function fetchAll() {
       try {
-        const pageSize = 100; // ajusta se precisar
-        let page = 1;
-        let totalPages = 1;
-        const acc: BMAccount[] = [];
+        const pageSize = 100
+        let page = 1
+        let totalPages = 1
+        const acc: BMAccount[] = []
 
         do {
-          const res = await fetch(`/api/bm?page=${page}&pageSize=${pageSize}`, {
-            signal: controller.signal,
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
+          const res = await fetch(`/api/bm?page=${page}&pageSize=${pageSize}`, { signal: controller.signal })
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data = await res.json()
+          const items: BMAccount[] = Array.isArray(data) ? data : data?.items ?? []
+          acc.push(...items)
+          totalPages = (Array.isArray(data) ? 1 : data?.totalPages) ?? 1
+          page += 1
+        } while (page <= totalPages)
 
-          const items: BMAccount[] = Array.isArray(data) ? data : data?.items ?? [];
-          acc.push(...items);
+        if (!mounted) return
 
-          totalPages = (Array.isArray(data) ? 1 : data?.totalPages) ?? 1;
-          page += 1;
-        } while (page <= totalPages);
+        const normalized = acc.map((item) => {
+          const sold = isSold(item)
+          const statusId = sold ? "sold" : (statusToColumnId[(item as any).status] ?? (item as any).status)
+          return { ...item, statusId }
+        })
 
-        if (!mounted) return;
+        setBmAccounts(normalized)
 
-        // normaliza status -> id da coluna
-        const normalized = acc.map((item) => ({
-          ...item,
-          statusId: statusToColumnId[(item as any).status] ?? (item as any).status,
-        }));
-
-        setBmAccounts(normalized);
-
-        // garante que a aba ativa exista nos dados
-        const platforms = new Set(normalized.map((a) => a.platform as Platform));
+        // ajusta tab inicial conforme dados
+        const platforms = new Set(normalized.map((a) => a.platform as Platform))
         if (!platforms.has(activeTab) && platforms.size > 0) {
-          // e.g., só veio "google"
-          setActiveTab([...platforms][0] as Platform);
+          setActiveTab([...platforms][0] as Platform)
         }
       } catch (e) {
         if ((e as any)?.name !== "AbortError") {
-          console.error("Failed to fetch all BM accounts:", e);
-          setBmAccounts([]);
+          console.error("Failed to fetch all BM accounts:", e)
+          setBmAccounts([])
         }
       }
     }
 
-    fetchAll();
+    fetchAll()
     return () => {
-      mounted = false;
-      controller.abort();
-    };
-  }, []); // sem deps
-
+      mounted = false
+      controller.abort()
+    }
+  }, []) // sem deps
 
   const getAccountsByStatus = (statusId: string) =>
-    bmAccounts.filter((acc) => acc.statusId === statusId && (acc.platform as unknown as Platform) === activeTab)
+    bmAccounts.filter(
+      (acc) => acc.statusId === statusId && (acc.platform as unknown as Platform) === activeTab
+    )
 
   const scroll = (dx: number) => {
     const el = document.getElementById("kanban-container")
     if (el) el.scrollBy({ left: dx, behavior: "smooth" })
   }
 
+  const renderColumn = (columnId: string) => {
+    const column = columns.find((c) => c.id === columnId)!
+    return (
+      <div key={column.id} className={`flex-shrink-0 ${isMobile ? "w-full" : "w-[22rem] md:w-96"} space-y-4 md:space-y-6`}>
+        {/* Column header */}
+        <div className="sticky top-0 z-10 pb-2 md:pb-4 backdrop-blur-sm">
+          <Badge
+            className={`${column.bgColor} ${column.color} border ${column.borderColor} text-xs md:text-sm px-4 md:px-6 py-2 md:py-3 font-medium rounded-2xl w-full justify-center`}
+          >
+            {column.title}
+          </Badge>
+        </div>
+
+        {/* Cards */}
+        <div className="space-y-3 md:space-y-4">
+          {getAccountsByStatus(column.id).map((account) => (
+            <Card
+              key={account.id}
+              className="bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04] hover:border-white/10 transition-all duration-500 cursor-pointer rounded-2xl backdrop-blur-sm group"
+            >
+              <CardHeader className="pb-3 text-white/90">
+                <div className="font-medium text-white/90 text-sm leading-tight group-hover:text-white transition-colors duration-300" dangerouslySetInnerHTML={{ __html: parseWhatsFormatting((account as any).title) }} />
+                {account.hash}
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                <div
+                  className="prose prose-invert max-w-none text-[11px] md:text-xs leading-relaxed whitespace-pre-wrap text-white"
+                  dangerouslySetInnerHTML={{ __html: parseWhatsFormatting((account as any).description) }}
+                />
+
+                <div className="flex justify-between items-end pt-3 border-t border-white/[0.05]">
+                  <p className="text-lg md:text-xl font-semibold text-white/95 group-hover:text-white transition-colors duration-300">
+                    {formatBRL((account as any).priceBRL ?? 0)}
+                  </p>
+                  <Badge className={`${column.bgColor} ${column.color} border-0 text-[10px] md:text-xs px-2.5 md:px-3 py-1.5 rounded-full`}>
+                    {column.title.split(" ").slice(0, 3).join(" ")}
+                  </Badge>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4 border-t border-white/[0.05]">
+                  <Button className="bg-green-600 text-white hover:bg-green-700 h-8 md:h-9 text-xs md:text-sm">
+                    <ShoppingCart className="mr-2 h-3.5 w-3.5 md:h-4 md:w-4" /> whatsapp
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          {getAccountsByStatus(column.id).length === 0 && (
+            <div className="text-center py-10 md:py-12 text-white/30 text-xs md:text-sm">Nenhuma conta disponível</div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const visibleIds = isMobile ? [mobileColumn] : columns.map(c => c.id)
+
   return (
     <div className="min-h-screen p-6 md:p-8" style={{ backgroundColor: "#010B18" }}>
-      <div className="mx-auto w-full max-w-[1400px] pt-8 md:pt-16">
+      <div className="mx-auto w-full max-w-[1400px] pt-8 md:pt-16 mt-28">
         {/* Header + Tabs */}
         <div className="flex flex-col items-center gap-6 md:gap-8">
-          <div className="flex items-center justify-center gap-6">
+          {/* Setas só no desktop */}
+          {!isMobile && (
+            <div className="flex items-center justify-center gap-6">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => scroll(-400)}
+                className="text-white/60 hover:text-white hover:bg-white/5 rounded-full w-10 h-10 md:w-12 md:h-12 transition-all duration-300"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+
+              <span className="text-white/50 text-xs md:text-sm font-medium">Navegue pelas categorias</span>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => scroll(400)}
+                className="text-white/60 hover:text-white hover:bg-white/5 rounded-full w-10 h-10 md:w-12 md:h-12 transition-all duration-300"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </Button>
+            </div>
+          )}
+
+          {/* CTAs sociais acima das Tabs */}
+          <div className="flex w-full justify-center gap-3 md:gap-4 flex-wrap">
             <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => scroll(-400)}
-              className="text-white/60 hover:text-white hover:bg-white/5 rounded-full w-10 h-10 md:w-12 md:h-12 transition-all duration-300"
+              asChild
+              className="rounded-2xl px-4 md:px-5 h-9 md:h-10 bg-[#25D366] hover:bg-[#1FB357] text-white font-medium shadow-sm"
             >
-              <ChevronLeft className="h-5 w-5" />
+              <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" aria-label="Abrir WhatsApp">
+                <MessageCircle className="mr-2 h-4 w-4" />
+                WhatsApp
+              </a>
             </Button>
 
-            <span className="text-white/50 text-xs md:text-sm font-medium">Navegue pelas categorias</span>
-
             <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => scroll(400)}
-              className="text-white/60 hover:text-white hover:bg-white/5 rounded-full w-10 h-10 md:w-12 md:h-12 transition-all duration-300"
+              asChild
+              className="rounded-2xl px-4 md:px-5 h-9 md:h-10 bg-[#E1306C] hover:bg-[#c22459] text-white font-medium shadow-sm"
             >
-              <ChevronRight className="h-5 w-5" />
+              <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" aria-label="Abrir Instagram">
+                <Instagram className="mr-2 h-4 w-4" />
+                Instagram
+              </a>
             </Button>
           </div>
 
-          <Tabs defaultValue="meta" onValueChange={(v) => setActiveTab(v as Platform)} className="w-[320px] md:w-[420px]">
+
+          {/* Tabs plataforma */}
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Platform)} className="w-[320px] md:w-[420px]">
             <TabsList className="grid w-full grid-cols-2 bg-white/[0.05] border border-white/[0.1] rounded-xl p-1">
               <TabsTrigger
                 value="meta"
@@ -179,68 +315,56 @@ export function BMKanbanBoard() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
+
+          {/* Picker único no MOBILE */}
+          {isMobile && (
+            <div className="w-full flex items-center justify-center">
+              <Sheet open={pickerOpen} onOpenChange={setPickerOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="outline" className="bg-white/5 border-white/10 text-white hover:bg-white/10">
+                    <Filter className="mr-2 h-4 w-4" />
+                    <span className="truncate max-w-[200px]">
+                      {MOBILE_LABELS[mobileColumn] ?? columns.find(c => c.id === mobileColumn)?.title}
+                    </span>
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="h-[65vh] bg-[#0a1220] text-white border-white/10">
+                  <SheetHeader><SheetTitle>Escolha a categoria</SheetTitle></SheetHeader>
+
+                  <div className="mt-4">
+                    <RadioGroup
+                      value={mobileColumn}
+                      onValueChange={(v) => { setMobileColumn(v); setPickerOpen(false) }}
+                      className="space-y-2"
+                    >
+                      {columns.map(col => (
+                        <label
+                          key={col.id}
+                          className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-4 py-3"
+                        >
+                          <div className="flex items-center gap-3">
+                            <RadioGroupItem id={`opt-${col.id}`} value={col.id} />
+                            <Label htmlFor={`opt-${col.id}`} className="text-white cursor-pointer">
+                              {MOBILE_LABELS[col.id] ?? col.title}
+                            </Label>
+                          </div>
+                        </label>
+                      ))}
+                    </RadioGroup>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </div>
+          )}
         </div>
 
         {/* Board */}
         <div
           id="kanban-container"
-          className="mt-8 md:mt-10 flex gap-6 md:gap-8 overflow-x-auto pb-6 scrollbar-none"
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          className={`${isMobile ? "mt-6 flex flex-col gap-6" : "mt-8 md:mt-10 flex gap-6 md:gap-8 overflow-x-auto pb-6 scrollbar-none"}`}
+          style={isMobile ? undefined : { scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
-          {columns.map((column) => (
-            <div key={column.id} className="flex-shrink-0 w-[22rem] md:w-96 space-y-4 md:space-y-6">
-              {/* Column header */}
-              <div className="sticky top-0 z-10 pb-2 md:pb-4 backdrop-blur-sm">
-                <Badge
-                  className={`${column.bgColor} ${column.color} border ${column.borderColor} text-xs md:text-sm px-4 md:px-6 py-2 md:py-3 font-medium rounded-2xl w-full justify-center`}
-                >
-                  {column.title}
-                </Badge>
-              </div>
-
-              {/* Cards */}
-              <div className="space-y-3 md:space-y-4">
-                {getAccountsByStatus(column.id).map((account) => (
-                  <Card
-                    key={account.id}
-                    className="bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04] hover:border-white/10 transition-all duration-500 cursor-pointer rounded-2xl backdrop-blur-sm group"
-                  >
-                    <CardHeader className="pb-3">
-                      <h4 className="font-medium text-white/90 text-sm leading-tight group-hover:text-white transition-colors duration-300">
-                        {account.title}
-                      </h4>
-                    </CardHeader>
-
-                    <CardContent className="space-y-4">
-                      <div
-                        className="prose prose-invert max-w-none text-[11px] md:text-xs leading-relaxed whitespace-pre-wrap text-white"
-                        dangerouslySetInnerHTML={{ __html: parseWhatsFormatting(account.description) }}
-                      />
-
-                      <div className="flex justify-between items-end pt-3 border-t border-white/[0.05]">
-                        <p className="text-lg md:text-xl font-semibold text-white/95 group-hover:text-white transition-colors duration-300">
-                          {formatBRL(account.priceBRL)}
-                        </p>
-                        <Badge className={`${column.bgColor} ${column.color} border-0 text-[10px] md:text-xs px-2.5 md:px-3 py-1.5 rounded-full`}>
-                          {column.title.split(" ").slice(0, 3).join(" ")}
-                        </Badge>
-                      </div>
-
-                      <div className="flex justify-end gap-2 pt-4 border-t border-white/[0.05]">
-                        <Button className="bg-green-600 text-white hover:bg-green-700 h-8 md:h-9 text-xs md:text-sm">
-                          <ShoppingCart className="mr-2 h-3.5 w-3.5 md:h-4 md:w-4" /> whatsapp
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {getAccountsByStatus(column.id).length === 0 && (
-                  <div className="text-center py-10 md:py-12 text-white/30 text-xs md:text-sm">Nenhuma conta disponível</div>
-                )}
-              </div>
-            </div>
-          ))}
+          {visibleIds.map(renderColumn)}
         </div>
       </div>
     </div>
