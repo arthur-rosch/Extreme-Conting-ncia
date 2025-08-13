@@ -1,4 +1,4 @@
-// File: /Users/arthurrosch/Desktop/Extreme Contingência Website (1)/app/admin/page.tsx
+// File: /Users/arthurrosch/Desktop/Extreme-Conting-ncia/app/admin/page.tsx
 import * as entry from '../../../../app/admin/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

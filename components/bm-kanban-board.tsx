@@ -4,8 +4,9 @@ import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight, Filter, ShoppingCart, Instagram, MessageCircle } from "lucide-react"
+import { ChevronLeft, ChevronRight, Filter, ShoppingCart, Instagram, MessageCircle, Eye, X } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import Image from "next/image"
 import { BMAccount } from "@/lib/types"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -110,6 +111,10 @@ export function BMKanbanBoard() {
   /** Mobile: apenas 1 coluna ativa de cada vez */
   const [mobileColumn, setMobileColumn] = useState<string>(columns[0].id)
   const [pickerOpen, setPickerOpen] = useState(false)
+  
+  /** Modal da BM selecionada */
+  const [selectedBM, setSelectedBM] = useState<BMAccountWithStatusId | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   // fetch com paginação
   useEffect(() => {
@@ -173,6 +178,16 @@ export function BMKanbanBoard() {
     if (el) el.scrollBy({ left: dx, behavior: "smooth" })
   }
 
+  const openBMModal = (account: BMAccountWithStatusId) => {
+    setSelectedBM(account)
+    setIsModalOpen(true)
+  }
+
+  const generateWhatsAppLink = (account: BMAccountWithStatusId) => {
+    const message = `Olá! Tenho interesse na BM: ${(account as any).title}\n\nHash: ${account.hash || 'N/A'}\nPreço: ${formatBRL((account as any).priceBRL ?? 0)}\n\nPoderia me dar mais informações?`
+    return `https://wa.me/47984473369?text=${encodeURIComponent(message)}`
+  }
+
   const renderColumn = (columnId: string) => {
     const column = columns.find((c) => c.id === columnId)!
     return (
@@ -192,6 +207,7 @@ export function BMKanbanBoard() {
             <Card
               key={account.id}
               className="bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04] hover:border-white/10 transition-all duration-500 cursor-pointer rounded-2xl backdrop-blur-sm group"
+              onClick={() => openBMModal(account)}
             >
               <CardHeader className="pb-3 text-white/90">
                 <div className="font-medium text-white/90 text-sm leading-tight group-hover:text-white transition-colors duration-300" dangerouslySetInnerHTML={{ __html: parseWhatsFormatting((account as any).title) }} />
@@ -213,10 +229,11 @@ export function BMKanbanBoard() {
                   </Badge>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-4 border-t border-white/[0.05]">
-                  <Button className="bg-green-600 text-white hover:bg-green-700 h-8 md:h-9 text-xs md:text-sm">
-                    <ShoppingCart className="mr-2 h-3.5 w-3.5 md:h-4 md:w-4" /> whatsapp
-                  </Button>
+                <div className="flex justify-center pt-4 border-t border-white/[0.05]">
+                  <div className="text-xs text-white/50 flex items-center gap-1">
+                    <Eye className="h-3 w-3" />
+                    Clique para ver detalhes
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -366,6 +383,75 @@ export function BMKanbanBoard() {
         >
           {visibleIds.map(renderColumn)}
         </div>
+
+        {/* Modal de Detalhes da BM */}
+        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+          <DialogContent className="bg-white/[0.02] border-white/[0.05] text-white max-w-lg max-h-[85vh] overflow-hidden backdrop-blur-sm rounded-2xl">
+            {selectedBM && (() => {
+              const column = columns.find(c => c.id === selectedBM.statusId)
+              return (
+                <div className="p-6 space-y-6">
+                  {/* Título */}
+                  <div 
+                    className="text-xl md:text-2xl font-semibold text-white/90 leading-tight text-center"
+                    dangerouslySetInnerHTML={{ __html: parseWhatsFormatting((selectedBM as any).title) }}
+                  />
+
+                  {/* Badge da Categoria com cores dinâmicas */}
+                  {column && (
+                    <div className="text-center">
+                      <Badge className={`${column.bgColor} ${column.color} border ${column.borderColor} px-4 py-2 rounded-full`}>
+                        {column.title}
+                      </Badge>
+                    </div>
+                  )}
+
+                  {/* Preço */}
+                  <div className="text-center">
+                    <div className="text-3xl md:text-4xl font-bold text-white/95">
+                      {formatBRL((selectedBM as any).priceBRL ?? 0)}
+                    </div>
+                  </div>
+
+                  {/* Hash */}
+                  {selectedBM.hash && (
+                    <div className="text-center">
+                      <div className="text-white/60 font-mono text-sm bg-white/[0.02] rounded-lg px-4 py-2 inline-block border border-white/[0.05]">
+                        {selectedBM.hash}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Descrição */}
+                  <div className="max-h-48 overflow-y-auto">
+                    <div 
+                      className="text-sm leading-relaxed text-white/80 text-center"
+                      dangerouslySetInnerHTML={{ __html: parseWhatsFormatting((selectedBM as any).description || 'Sem descrição disponível') }}
+                    />
+                  </div>
+
+                  {/* Botão de Ação com cores da categoria */}
+                  <div className="pt-4">
+                    <Button
+                      asChild
+                      className={`w-full ${column?.bgColor || 'bg-white/10'} hover:opacity-80 text-white font-medium rounded-2xl h-12 border-0`}
+                    >
+                      <a 
+                        href={selectedBM ? generateWhatsAppLink(selectedBM) : '#'}
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2"
+                      >
+                        <MessageCircle className="h-5 w-5" />
+                        Quero essa BM!
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              )
+            })()}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

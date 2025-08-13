@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronDown, ChevronUp, Copy } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, MessageCircle } from 'lucide-react';
+import { useWhatsApp } from '@/hooks/use-whatsapp';
 
 const bmStatusSchema = z.enum(['1-10k', '10k-30k', '30k-70k', '70k-100k', '100k-500k', '500k+']);
 const bmTypeSchema = z.enum(['meta', 'google']);
@@ -34,6 +35,7 @@ interface BMFormProps {
   initialData?: Partial<BMFormValues>;
   onSubmit: (data: BMFormValues) => void;
   isLoading: boolean;
+  bmId?: string; // Para identificar a BM ao enviar notificação
 }
 
 /* helpers zap */
@@ -50,7 +52,7 @@ function parseWhatsFormatting(text: string) {
     .replace(/\n/g, '<br/>');
 }
 
-export function BMForm({ initialData, onSubmit, isLoading }: BMFormProps) {
+export function BMForm({ initialData, onSubmit, isLoading, bmId }: BMFormProps) {
   const {
     register, handleSubmit, reset, control, watch,
     formState: { errors },
@@ -62,6 +64,8 @@ export function BMForm({ initialData, onSubmit, isLoading }: BMFormProps) {
       ...initialData,
     },
   });
+
+  const { sendNewBMNotification, isLoading: isWhatsAppLoading } = useWhatsApp();
 
   useEffect(() => { if (initialData) reset(getValuesWithSafeDefaults(initialData)); }, [initialData, reset]);
   function getValuesWithSafeDefaults(v?: Partial<BMFormValues>): BMFormValues {
@@ -84,6 +88,23 @@ export function BMForm({ initialData, onSubmit, isLoading }: BMFormProps) {
   async function copyWhats() {
     try { await navigator.clipboard.writeText(descriptionValue); } catch { }
   }
+
+  const handleSendWhatsAppNotification = async () => {
+    const currentValues = watch();
+    
+    if (!currentValues.title || !currentValues.priceBRL) {
+      alert('Preencha pelo menos o título e preço antes de enviar a notificação');
+      return;
+    }
+
+    await sendNewBMNotification({
+      bmId: bmId || 'new-bm',
+      name: currentValues.title,
+      price: currentValues.priceBRL,
+      description: currentValues.description,
+      location: 'Brasil', // Você pode adicionar um campo de localização se necessário
+    });
+  };
 
   return (
     <form
@@ -146,6 +167,15 @@ export function BMForm({ initialData, onSubmit, isLoading }: BMFormProps) {
                 className="h-10 bg-white/10 hover:bg-white/20 border border-white/20">
                 <Copy className="mr-2 h-4 w-4" /> Copiar
               </Button>
+              <Button 
+                type="button" 
+                onClick={handleSendWhatsAppNotification}
+                disabled={isWhatsAppLoading}
+                className="h-10 bg-green-600 hover:bg-green-700 border border-green-500"
+              >
+                <MessageCircle className="mr-2 h-4 w-4" />
+                {isWhatsAppLoading ? 'Enviando...' : 'WhatsApp'}
+              </Button>
             </div>
 
             {showPreviewMobile && (
@@ -173,10 +203,19 @@ export function BMForm({ initialData, onSubmit, isLoading }: BMFormProps) {
                 <div className="prose prose-invert max-w-none text-sm leading-relaxed"
                   dangerouslySetInnerHTML={{ __html: descriptionPreviewHtml }} />
               </div>
-              <div className="mt-2">
+              <div className="mt-2 space-y-2">
                 <Button type="button" onClick={copyWhats}
                   className="w-full bg-white/10 hover:bg-white/20 border border-white/20">
                   <Copy className="mr-2 h-4 w-4" /> Copiar p/ WhatsApp
+                </Button>
+                <Button 
+                  type="button" 
+                  onClick={handleSendWhatsAppNotification}
+                  disabled={isWhatsAppLoading}
+                  className="w-full bg-green-600 hover:bg-green-700 border border-green-500"
+                >
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  {isWhatsAppLoading ? 'Enviando...' : 'Enviar WhatsApp'}
                 </Button>
               </div>
             </div>

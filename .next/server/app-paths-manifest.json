@@ -1,6 +1,9 @@
 {
   "/api/bm/route": "app/api/bm/route.js",
-  "/page": "app/page.js",
+  "/api/bm/[id]/route": "app/api/bm/[id]/route.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/whatsapp/new-bm/route": "app/api/whatsapp/new-bm/route.js",
+  "/api/whatsapp/sold-bm/route": "app/api/whatsapp/sold-bm/route.js",
   "/admin/page": "app/admin/page.js",
-  "/admin/login/page": "app/admin/login/page.js"
+  "/page": "app/page.js"
 }

@@ -1,4 +1,4 @@
-// File: /Users/arthurrosch/Desktop/Extreme Contingência Website (1)/app/api/bm/route.ts
+// File: /Users/arthurrosch/Desktop/Extreme-Conting-ncia/app/api/bm/route.ts
 import * as entry from '../../../../../app/api/bm/route.js'
 import type { NextRequest } from 'next/server.js'
 

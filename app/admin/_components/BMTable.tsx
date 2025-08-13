@@ -6,10 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Trash2, Edit, PlusCircle, Search } from 'lucide-react';
+import { Trash2, Edit, PlusCircle, Search, DollarSign, MessageCircle } from 'lucide-react';
 import { BMForm } from './BMForm';
 import { useToast } from '@/components/ui/use-toast';
+import { useWhatsApp } from '@/hooks/use-whatsapp';
 import useSWR from 'swr';
 
 const fetcher = async (url: string) => {
@@ -43,11 +45,14 @@ interface BMTableProps {
 export function BMTable({ onEdit, onDelete, onCreate, isLoading }: BMTableProps) {
   const { data: bmAccounts = [], error, isLoading: isSWRLoading, mutate } = useSWR<BMAccount[]>('/api/bm', fetcher);
   const { toast } = useToast();
+  const { sendSoldBMNotification, isLoading: isWhatsAppLoading } = useWhatsApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [sellConfirmId, setSellConfirmId] = useState<string | null>(null);
+  const [buyerInfo, setBuyerInfo] = useState('');
 
   const statusOptions = ['all', '1-10k', '10k-30k', '30k-70k', '70k-100k', '100k-500k', '500k+'];
 
@@ -89,6 +94,60 @@ export function BMTable({ onEdit, onDelete, onCreate, isLoading }: BMTableProps)
       toast({ title: 'Error', description: 'Failed to delete BM Account.', variant: 'destructive' });
     } finally {
       setDeleteConfirmId(null);
+    }
+  };
+
+  const handleSellConfirm = async () => {
+    if (!sellConfirmId) return;
+    
+    const account = bmAccounts.find(acc => acc.id === sellConfirmId);
+    if (!account) return;
+
+    try {
+      // Primeiro, marcar como vendida no banco
+      const response = await fetch(`/api/bm/${sellConfirmId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          saleStatus: 'sold',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update sale status');
+      }
+
+      // Gerar número da BM baseado no índice ou ID
+      const bmIndex = bmAccounts.findIndex(acc => acc.id === account.id) + 1;
+      const bmNumber = bmIndex.toString().padStart(3, '0');
+
+      // Depois, enviar notificação WhatsApp
+      await sendSoldBMNotification({
+        bmId: account.id,
+        name: account.title,
+        price: account.priceBRL,
+        buyerInfo: buyerInfo || undefined,
+        bmNumber: account.hash,
+      });
+
+      toast({ 
+        title: 'Success', 
+        description: 'BM marcada como vendida e notificação enviada!' 
+      });
+      
+      mutate(); // Revalida os dados
+    } catch (error) {
+      console.error('Erro ao marcar como vendida:', error);
+      toast({ 
+        title: 'Error', 
+        description: 'Failed to mark BM as sold.', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setSellConfirmId(null);
+      setBuyerInfo('');
     }
   };
 
@@ -223,6 +282,17 @@ export function BMTable({ onEdit, onDelete, onCreate, isLoading }: BMTableProps)
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
+                    {account.saleStatus === 'available' && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="border-green-500/30 text-green-400 hover:bg-green-500/10 hover:border-green-400"
+                        onClick={() => setSellConfirmId(account.id)}
+                        disabled={isWhatsAppLoading}
+                      >
+                        <DollarSign className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="icon"
@@ -267,6 +337,63 @@ export function BMTable({ onEdit, onDelete, onCreate, isLoading }: BMTableProps)
                 disabled={isLoading}
               >
                 {isLoading ? 'Deleting...' : 'Delete'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Sell Confirmation Dialog */}
+        <Dialog open={!!sellConfirmId} onOpenChange={() => {
+          setSellConfirmId(null);
+          setBuyerInfo('');
+        }}>
+          <DialogContent className="bg-black/90 border-white/10 text-white max-w-md backdrop-blur-xl rounded-3xl">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-medium text-white/95 flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-green-400" />
+                Marcar como Vendida
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="text-white/80">
+                Confirma que esta BM foi vendida? Isso irá:
+              </div>
+              <ul className="text-sm text-white/70 space-y-1 ml-4">
+                <li>• Alterar o status para "Vendida"</li>
+                <li>• Enviar notificação no WhatsApp</li>
+                <li>• Registrar a venda no sistema</li>
+              </ul>
+              <div>
+                <Label htmlFor="buyerInfo" className="text-sm text-white/80">
+                  Informações do Comprador (opcional)
+                </Label>
+                <Input
+                  id="buyerInfo"
+                  value={buyerInfo}
+                  onChange={(e) => setBuyerInfo(e.target.value)}
+                  placeholder="Nome do comprador, telefone, etc..."
+                  className="mt-1 bg-white/[0.03] border-white/[0.08] focus:ring-2 focus:ring-green-500/50 text-white"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                className="border-white/20 text-white/90 hover:bg-white/5 hover:border-white/30"
+                onClick={() => {
+                  setSellConfirmId(null);
+                  setBuyerInfo('');
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="bg-green-500 hover:bg-green-600 text-white rounded-xl flex items-center gap-2"
+                onClick={handleSellConfirm}
+                disabled={isLoading || isWhatsAppLoading}
+              >
+                <MessageCircle className="h-4 w-4" />
+                {isLoading || isWhatsAppLoading ? 'Processando...' : 'Confirmar Venda'}
               </Button>
             </DialogFooter>
           </DialogContent>
