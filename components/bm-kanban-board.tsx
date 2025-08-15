@@ -39,10 +39,10 @@ const MOBILE_LABELS: Record<string, string> = {
 
 const WHATSAPP_URL =
   process.env.NEXT_PUBLIC_WHATSAPP_URL ??
-  "https://wa.me/0000000000000?text=" + encodeURIComponent("Olá! Quero saber mais sobre as BMs.");
+  "https://wa.me/47984473369?text=" + encodeURIComponent("Olá! Quero saber mais sobre as BMs.");
 
 const INSTAGRAM_URL =
-  process.env.NEXT_PUBLIC_INSTAGRAM_URL ?? "https://instagram.com/seu_perfil";
+  process.env.NEXT_PUBLIC_INSTAGRAM_URL ?? "https://www.instagram.com/extreme.contingencia/";
 
 
 /** Map de status -> coluna */

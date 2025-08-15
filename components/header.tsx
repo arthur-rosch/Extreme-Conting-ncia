@@ -17,10 +17,10 @@ export function Header() {
   ]
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 p-6">
+    <div className="fixed top-0 left-0 right-0 z-50 p-4">
       <div className="max-w-7xl mx-auto">
-        <header className="bg-black/20 border border-white/25 rounded-3xl px-6 py-3 backdrop-blur-xl">
-          <div className="flex items-center justify-between">
+        <header className="bg-black/20 border-2 border-white/30 rounded-3xl px-8 py-4 backdrop-blur-xl">
+          <div className="flex items-center justify-center">
             {/* Logo */}
             <Link href="/" className="flex items-center space-x-4 group">
 

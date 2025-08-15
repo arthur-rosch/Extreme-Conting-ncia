@@ -6,14 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { toast } = useToast();
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,17 +26,28 @@ export default function LoginPage() {
         body: JSON.stringify({ username, password }),
       });
 
+      const responseData = await response.json();
+
       if (response.ok) {
+        console.log('Login successful:', responseData);
+        
+        // Salvar token no localStorage
+        localStorage.setItem("token", responseData.token);
+        localStorage.setItem("user", JSON.stringify(responseData.user));
+
         toast({
-          title: 'Login Successful',
-          description: 'Redirecting to admin dashboard.',
+          title: 'Login realizado com sucesso',
+          description: 'Redirecionando para o painel administrativo.',
         });
+        
+        console.log('Redirecting to /admin...');
+        
+        console.log('Redirecting to /admin...');
         router.push('/admin');
       } else {
-        const errorData = await response.json();
         toast({
-          title: 'Login Failed',
-          description: errorData.message || 'Invalid credentials.',
+          title: 'Falha no login',
+          description: responseData.message || 'Credenciais inválidas.',
           variant: 'destructive',
         });
       }

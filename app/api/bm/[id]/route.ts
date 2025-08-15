@@ -1,17 +1,63 @@
 // app/api/bm/[id]/route.ts
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { bmUpdateSchema } from '@/lib/bm-zod'
 import { normalizeSaleStatus, normalizeStatus, normalizeType } from '@/lib/bm-normalizers'
+import jwt from "jsonwebtoken"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 type Params = { params: { id: string } }
 
-// (opcional) GET /api/bm/:id
-export async function GET(_req: Request, { params }: Params) {
+// Middleware para verificar autenticação e role
+async function authenticateUser(request: NextRequest) {
   try {
+    const authHeader = request.headers.get("authorization")
+    
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return { error: "Token não fornecido", status: 401 }
+    }
+
+    const token = authHeader.substring(7)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback-secret") as any
+    
+    if (!decoded.userId || !decoded.role) {
+      return { error: "Token inválido", status: 401 }
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId }
+    }) as any
+
+    if (!user) {
+      return { error: "Usuário não encontrado", status: 401 }
+    }
+
+    return { user }
+  } catch (error) {
+    return { error: "Token inválido", status: 401 }
+  }
+}
+
+// (opcional) GET /api/bm/:id
+export async function GET(request: NextRequest, { params }: Params) {
+  try {
+    const auth = await authenticateUser(request)
+    if ('error' in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status })
+    }
+
+    const { user } = auth
+
+    // Apenas ADMIN pode ver BM accounts
+    if (user.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas administradores podem ver BM accounts." },
+        { status: 403 }
+      )
+    }
+
     const item = await prisma.bMAccount.findUnique({ where: { id: params.id } })
     if (!item) return NextResponse.json({ message: 'Not found' }, { status: 404 })
     return NextResponse.json(item)
@@ -26,9 +72,24 @@ export async function GET(_req: Request, { params }: Params) {
  * Semântica clássica de PUT: aceita payload “completo”.
  * Mas aqui suportamos parcial também (igual PATCH) para praticidade.
  */
-export async function PUT(req: Request, { params }: Params) {
+export async function PUT(request: NextRequest, { params }: Params) {
   try {
-    const raw = await req.json()
+    const auth = await authenticateUser(request)
+    if ('error' in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status })
+    }
+
+    const { user } = auth
+
+    // Apenas ADMIN pode atualizar BM accounts
+    if (user.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas administradores podem atualizar BM accounts." },
+        { status: 403 }
+      )
+    }
+
+    const raw = await request.json()
     const parsed = bmUpdateSchema.parse(raw)
 
     const data: any = {}
@@ -63,13 +124,28 @@ export async function PUT(req: Request, { params }: Params) {
  * PATCH /api/bm/:id (opcional)
  * Idêntico ao PUT acima (parcial). Mantive por ergonomia REST.
  */
-export async function PATCH(req: Request, ctx: Params) {
-  return PUT(req, ctx)
+export async function PATCH(request: NextRequest, ctx: Params) {
+  return PUT(request, ctx)
 }
 
 // DELETE /api/bm/:id
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(request: NextRequest, { params }: Params) {
   try {
+    const auth = await authenticateUser(request)
+    if ('error' in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status })
+    }
+
+    const { user } = auth
+
+    // Apenas ADMIN pode deletar BM accounts
+    if (user.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas administradores podem deletar BM accounts." },
+        { status: 403 }
+      )
+    }
+
     await prisma.bMAccount.delete({ where: { id: params.id } })
     return new NextResponse(null, { status: 204 })
   } catch (error: any) {

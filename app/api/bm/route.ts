@@ -1,82 +1,194 @@
 // app/api/bm/route.ts
-import { NextResponse } from 'next/server'
-import { prisma, } from '@/lib/prisma'
-import { bmCreateSchema } from '@/lib/bm-zod'
-import { normalizeSaleStatus, normalizeStatus, normalizeType } from '@/lib/bm-normalizers'
-import { Prisma } from '@prisma/client'
+import { NextRequest, NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+import jwt from "jsonwebtoken"
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
-export async function GET(req: Request) {
+// Middleware para verificar autenticação e role
+async function authenticateUser(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
-    const search = searchParams.get('search')?.trim() || undefined
-    const page = Number(searchParams.get('page') ?? 1)
-    const pageSize = Math.min(Number(searchParams.get('pageSize') ?? 20), 100)
-    const skip = (page - 1) * pageSize
-
-    // 🔧 força o tipo correto do Prisma
-    let where: Prisma.BMAccountWhereInput = {}
-
-    if (search) {
-      const ci: Prisma.QueryMode = 'insensitive' // ou: const ci = 'insensitive' as const
-      where = {
-        OR: [
-          { title: { contains: search, mode: ci } },
-          { description: { contains: search, mode: ci } },
-          { hash: { contains: search, mode: ci } }, // hash é String? no schema; o filtro funciona igual
-        ],
-      }
+    const authHeader = request.headers.get("authorization")
+    
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return { error: "Token não fornecido", status: 401 }
     }
 
-    const [items, total] = await Promise.all([
-      prisma.bMAccount.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: pageSize,
-      }),
-      prisma.bMAccount.count({ where }),
-    ])
+    const token = authHeader.substring(7)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback-secret") as any
+    
+    if (!decoded.userId || !decoded.role) {
+      return { error: "Token inválido", status: 401 }
+    }
 
-    return NextResponse.json({
-      items,
-      page,
-      pageSize,
-      total,
-      totalPages: Math.ceil(total / pageSize),
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, email: true, name: true, role: true }
     })
+
+    if (!user) {
+      return { error: "Usuário não encontrado", status: 401 }
+    }
+
+    return { user }
   } catch (error) {
-    console.error('Error in GET /api/bm:', error)
-    return NextResponse.json({ message: 'Failed to fetch BM accounts' }, { status: 500 })
+    return { error: "Token inválido", status: 401 }
   }
 }
 
-export async function POST(req: Request) {
+// GET - Listar BM accounts (apenas ADMIN pode ver todas, USER vê apenas as suas)
+export async function GET(request: NextRequest) {
   try {
-    const raw = await req.json()
-    const parsed = bmCreateSchema.parse(raw)
-
-    const data = {
-      title: parsed.title,
-      description: parsed.description,
-      priceBRL: parsed.priceBRL,
-      status: normalizeStatus(parsed.status),
-      type: normalizeType(parsed.type),
-      platform: normalizeType(parsed.platform),
-      saleStatus: normalizeSaleStatus(parsed.saleStatus),
-      hash: parsed.hash ?? null,
+    const auth = await authenticateUser(request)
+    if ('error' in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status })
     }
 
-    const created = await prisma.bMAccount.create({ data })
-    return NextResponse.json(created, { status: 201 })
-  } catch (error: any) {
-    console.error('Error in POST /api/bm:', error)
-    const isZod = !!error?.issues
+    const { user } = auth
+
+    // Se for ADMIN, pode ver todas as BM accounts
+    if (user.role === "ADMIN") {
+      const bmAccounts = await prisma.bMAccount.findMany({
+        orderBy: { createdAt: 'desc' }
+      })
+
+      return NextResponse.json(bmAccounts)
+    }
+
+    return NextResponse.json({ error: "Acesso negado. Apenas administradores podem ver todas as BM accounts." }, { status: 403 })
+  } catch (error) {
+    console.error("Erro ao listar BM accounts:", error)
     return NextResponse.json(
-      { message: isZod ? 'Invalid data' : 'Failed to create BM account', error: String(error.message ?? error) },
-      { status: isZod ? 400 : 500 },
+      { error: "Erro interno do servidor" },
+      { status: 500 }
+    )
+  }
+}
+
+// POST - Criar nova BM account (apenas ADMIN pode criar)
+export async function POST(request: NextRequest) {
+  try {
+    const auth = await authenticateUser(request)
+    if ('error' in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status })
+    }
+
+    const { user } = auth
+
+    // Apenas ADMIN pode criar BM accounts
+    if (user.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas administradores podem criar BM accounts." },
+        { status: 403 }
+      )
+    }
+
+    const body = await request.json()
+    const { title, description, priceBRL, status, type, platform, hash } = body
+
+    const bmAccount = await prisma.bMAccount.create({
+      data: {
+        title,
+        description,
+        priceBRL: parseFloat(priceBRL),
+        status,
+        type,
+        platform,
+        hash
+      }
+    })
+
+    return NextResponse.json(bmAccount, { status: 201 })
+  } catch (error) {
+    console.error("Erro ao criar BM account:", error)
+    return NextResponse.json(
+      { error: "Erro interno do servidor" },
+      { status: 500 }
+    )
+  }
+}
+
+// PUT - Atualizar BM account (apenas ADMIN pode atualizar)
+export async function PUT(request: NextRequest) {
+  try {
+    const auth = await authenticateUser(request)
+    if ('error' in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status })
+    }
+
+    const { user } = auth
+
+    // Apenas ADMIN pode atualizar BM accounts
+    if (user.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas administradores podem atualizar BM accounts." },
+        { status: 403 }
+      )
+    }
+
+    const body = await request.json()
+    const { id, title, description, priceBRL, status, type, platform, saleStatus, hash } = body
+
+    const bmAccount = await prisma.bMAccount.update({
+      where: { id },
+      data: {
+        title,
+        description,
+        priceBRL: parseFloat(priceBRL),
+        status,
+        type,
+        platform,
+        saleStatus,
+        hash
+      }
+    })
+
+    return NextResponse.json(bmAccount)
+  } catch (error) {
+    console.error("Erro ao atualizar BM account:", error)
+    return NextResponse.json(
+      { error: "Erro interno do servidor" },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE - Deletar BM account (apenas ADMIN pode deletar)
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await authenticateUser(request)
+    if ('error' in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status })
+    }
+
+    const { user } = auth
+
+    // Apenas ADMIN pode deletar BM accounts
+    if (user.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas administradores podem deletar BM accounts." },
+        { status: 403 }
+      )
+    }
+
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "ID da BM account é obrigatório" },
+        { status: 400 }
+      )
+    }
+
+    await prisma.bMAccount.delete({
+      where: { id }
+    })
+
+    return NextResponse.json({ message: "BM account deletada com sucesso" })
+  } catch (error) {
+    console.error("Erro ao deletar BM account:", error)
+    return NextResponse.json(
+      { error: "Erro interno do servidor" },
+      { status: 500 }
     )
   }
 }

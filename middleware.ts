@@ -1,31 +1,41 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+import jwt from 'jsonwebtoken'
 
 export function middleware(request: NextRequest) {
-  const adminSession = request.cookies.get('adm_session');
-  const { pathname } = request.nextUrl;
+  const { pathname } = request.nextUrl
 
-  // Protect /admin routes
-  if (pathname.startsWith('/admin')) {
-    if (pathname === '/admin/login') {
-      if (adminSession) {
-        // If already logged in, redirect from login page to admin dashboard
-        return NextResponse.redirect(new URL('/admin', request.url));
-      }
-      return NextResponse.next();
-    } else {
-      // For any other /admin route, check for session
-      if (!adminSession) {
-        return NextResponse.redirect(new URL('/admin/login', request.url));
-      }
-    }
+  // Rotas que precisam de autenticação
+  const protectedRoutes = ['/2fa', '/admin']
+  
+  // Rotas de login (não são protegidas)
+  const loginRoutes = ['/login', '/admin/login']
+  
+  // Rotas que precisam de role ADMIN
+  const adminRoutes = ['/admin']
+  
+  // Verificar se está acessando uma rota protegida (excluindo rotas de login)
+  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route)) && 
+                          !loginRoutes.some(route => pathname === route)
+  
+  if (isProtectedRoute) {
+    // Para rotas protegidas, deixar o frontend verificar o token
+    // O middleware não pode acessar localStorage, então vamos deixar passar
+    return NextResponse.next()
   }
 
-
-
-  return NextResponse.next();
+  return NextResponse.next()
 }
 
 export const config = {
-  matcher: ['/admin/:path*'],
-};
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
+}

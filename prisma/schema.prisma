@@ -26,6 +26,41 @@ enum BmSaleStatus {
   sold
 }
 
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relacionamentos
+  twoFactorAuths TwoFactorAuth[]
+
+  @@map("Users")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model TwoFactorAuth {
+  id        String   @id @default(uuid())
+  userId    String
+  secret    String
+  name      String   // Nome do serviço (ex: "Google", "Facebook")
+  issuer    String?  // Emissor do código (ex: "Google", "Meta")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relacionamento
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("TwoFactorAuths")
+}
+
 model BMAccount {
   id          String       @id @default(uuid())
   title       String

@@ -6,45 +6,60 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/admin/page": [
+    "/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/admin/page.js"
+      "static/chunks/app/page.js"
     ],
     "/api/bm/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/bm/route.js"
     ],
-    "/api/whatsapp/new-bm/route": [
+    "/login/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/whatsapp/new-bm/route.js"
+      "static/chunks/app/login/page.js"
     ],
-    "/api/whatsapp/test/route": [
+    "/api/auth/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/whatsapp/test/route.js"
+      "static/chunks/app/api/auth/route.js"
     ],
-    "/api/bm/[id]/route": [
+    "/admin/login/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/bm/[id]/route.js"
+      "static/chunks/app/admin/login/page.js"
     ],
-    "/api/whatsapp/sold-bm/route": [
+    "/api/admin/login/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/whatsapp/sold-bm/route.js"
+      "static/chunks/app/api/admin/login/route.js"
     ],
-    "/page": [
+    "/admin/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/admin/page.js"
     ],
-    "/_not-found/page": [
+    "/api/auth/check/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/_not-found/page.js"
+      "static/chunks/app/api/auth/check/route.js"
+    ],
+    "/2fa/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/2fa/page.js"
+    ],
+    "/api/auth/verify/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/auth/verify/route.js"
+    ],
+    "/api/2fa/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/2fa/route.js"
     ]
   }
 }

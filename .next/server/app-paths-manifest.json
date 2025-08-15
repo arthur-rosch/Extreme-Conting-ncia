@@ -1,9 +1,10 @@
 {
-  "/api/bm/route": "app/api/bm/route.js",
-  "/api/bm/[id]/route": "app/api/bm/[id]/route.js",
-  "/_not-found/page": "app/_not-found/page.js",
-  "/api/whatsapp/new-bm/route": "app/api/whatsapp/new-bm/route.js",
-  "/api/whatsapp/sold-bm/route": "app/api/whatsapp/sold-bm/route.js",
+  "/api/auth/route": "app/api/auth/route.js",
+  "/api/auth/verify/route": "app/api/auth/verify/route.js",
+  "/api/2fa/route": "app/api/2fa/route.js",
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js",
+  "/admin/login/page": "app/admin/login/page.js",
   "/admin/page": "app/admin/page.js",
-  "/page": "app/page.js"
+  "/2fa/page": "app/2fa/page.js"
 }
